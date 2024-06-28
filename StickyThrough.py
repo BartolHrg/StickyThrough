@@ -12,11 +12,11 @@ pass
 
 
 import tkinter as tk;
-from tkinter import ttk, colorchooser;
+from tkinter import ttk, colorchooser, messagebox, font;
 
 import itertools, json;
 
-
+# TODO add title
 class StickyNote:
 	def __init__(self, config: ConfigElement):
 		self.config = config;
@@ -24,12 +24,27 @@ class StickyNote:
 		self.frame = self.window.frame;
 		self.tools = Tools(self);
 		self.tools.pack(side = tk.TOP, fill = tk.X);
-		# self.note = tk.Text(self.frame, background = "yellow", border = 4, relief = tk.RAISED);
+		self.title = ttk.Entry(self.frame, font = font.Font(self.window, family="Helvetica", size=14, weight="bold"), justify = tk.CENTER);
+		self.title.insert(0, config["title"]);
+		self.title.pack(side = tk.TOP, fill = tk.X);
 		self.note = tk.Text(self.frame, background = config["color"]);
 		self.note.insert("0.0", config["text"]);
 		self.note.pack(fill = tk.BOTH, expand = True);
 		self.window.geometry(f"{config['width']}x{config['height']}+{config['x']}+{config['y']}");
 		# self.frame.bind("<Button-1>" , lambda e: print(e));
+	pass
+	def updateConfig(self):
+		window = self.window;
+		text = self.note;
+		self.config.update(
+			x      = window.winfo_x(),
+			y      = window.winfo_y(),
+			width  = window.winfo_width(),
+			height = window.winfo_height(),
+			color  = text["background"],
+			text   = text.get("0.0", tk.END),
+			title  = self.title.get(),
+		);
 	pass
 pass
 class Window(tk.Tk):
@@ -106,23 +121,44 @@ class Window(tk.Tk):
 pass
 class Tools(ttk.Frame):
 	def __init__(self, note: StickyNote):
-		ttk.Frame.__init__(self, note.frame);
+		ttk.Frame.__init__(self, note.frame, cursor = "fleur");
 		self.note = note;
 		
-		self.move_button = ttk.Label(self, text = "Move", cursor = "fleur", border = 1, relief = tk.SOLID);
-		self.move_button.pack(side = tk.LEFT);
-		self.dragger = Window.Dragger(self.note.window, self.move_button);
+		# self.move_button = ttk.Label(self, text = "Move", cursor = "fleur", border = 1, relief = tk.SOLID, padding = 2);
+		# self.move_button.pack(side = tk.LEFT);
+		# self.dragger = Window.Dragger(self.note.window, self.move_button);
+		self.dragger = Window.Dragger(self.note.window, self);
 		
-		self.color_picker = ttk.Button(self, text = "Color", command = self.pickColor)
+		self.color_picker = ttk.Button(self, cursor = "arrow", text = "Color", width = 6, command = self.pickColor);
 		self.color_picker.pack(side = tk.LEFT);
 		
+		self.delete_button = ttk.Button(self, cursor = "arrow", text = "Del", width = 4, command = self.delete);
+		self.delete_button.pack(side = tk.RIGHT);
+		self.create_button = ttk.Button(self, cursor = "arrow", text = "New", width = 4, command = self.addNew);
+		self.create_button.pack(side = tk.RIGHT);
 		# TODO new, hide?, delete
-		# TODO save on ctrl S only!
+		# TODO save on ctrl S (no button!)
 	pass
 	def pickColor(self):
 		text = self.note.note;
 		(color_tuple, color_str) = colorchooser.askcolor(text["background"]);
 		if color_str is not None: text.config(background = color_str);
+	pass
+	def delete(self):
+		# TODO title
+		if not messagebox.askyesno(f"Delete note <{self.note.title.get()}>", "This will permanently delete this note", icon = messagebox.WARNING): return;
+		index = notes.index(self.note);
+		del notes[index];
+		del notes_config[index];
+		self.note.window.destroy();
+		# TODO persist
+		save();
+	pass
+	def addNew(self):
+		config = getDefaultConfig();
+		notes_config.append(config);
+		notes.append(StickyNote(config));
+		save();
 	pass
 pass
 # note = StickyNote();
@@ -134,24 +170,28 @@ class ConfigElement(TypedDict):
 	height: int;
 	color: str; # or Any
 	text: str;
+	title: str;
 pass
-default_config: ConfigElement = {
+def getDefaultConfig() -> ConfigElement: return {
 	"x": 1000,
 	"y": 100,
-	"width": 200,
-	"height": 200,
+	"width": 250,
+	"height": 300,
 	"color": "yellow",
-	"text": "Hello World!\n"
+	"text": "Hello World!\n",
+	"title": "New Note",
 };
 
-with open(__actual_dir__ + "/config.json") as f:
-	notes_config: list[ConfigElement] = json.load(f);
+config_filename = __actual_dir__ + "/config.json";
+if not os.path.exists(config_filename): 
+	with open(config_filename, "w") as f: f.write("[]");
 pass
+with open(config_filename) as f: notes_config: list[ConfigElement] = json.load(f);
+if not notes_config: notes_config.append(getDefaultConfig());
 
 def save():
-	with open(__actual_dir__ + "/config.json") as f:
-		json.dump(notes_config, f);
-	pass
+	for note in notes: note.updateConfig();
+	with open(__actual_dir__ + "/config.json", "w") as f: json.dump(notes_config, f);
 pass
 
 notes = [StickyNote(config) for config in notes_config];

@@ -1,18 +1,6 @@
 [
-	{
-		"x": 1000,
-		"y": 100,
-		"width": 200,
-		"height": 200,
-		"color": "yellow",
-		"text": "Hello World!\n"
-	},
-	{
-		"x": 1100,
-		"y": 200,
-		"width": 200,
-		"height": 200,
-		"color": "#00ff00",
-		"text": "Hello World!\n"
-	}
+	{"x": 1256, "y": 296, "width": 250, "height": 300, "color": "yellow", "text": "Hello World!\n\n", "title": "New Note"}, 
+	{"x": 882, "y": 303, "width": 250, "height": 300, "color": "#ff8080", "text": "Hello World!\n\n", "title": "NewasasdNote"}, 
+	{"x": 1000, "y": 100, "width": 250, "height": 300, "color": "yellow", "text": "Hello World!\nsome text\n", "title": "New Note"}, 
+	{"x": 1338, "y": 107, "width": 411, "height": 509, "color": "yellow", "text": "Hello World!\n\n", "title": "resized"}
 ]
