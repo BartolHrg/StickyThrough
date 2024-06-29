@@ -54,7 +54,7 @@ try:
 			self.title_var = tk.StringVar(self.frame, value = config["title"]);
 			self.title = ttk.Entry(self.frame, textvariable = self.title_var, font = font.Font(self.window, family="Helvetica", size=14, weight="bold"), justify = tk.CENTER);
 			self.title.pack(side = tk.TOP, fill = tk.X);
-			self.note = tk.Text(self.frame, background = config["color"]);
+			self.note = tk.Text(self.frame, background = config["color"], wrap = "none");
 			self.note.insert("0.0", config["text"]);
 			self.note.pack(fill = tk.BOTH, expand = True);
 			self.window.geometry(f"{config['width']}x{config['height']}+{config['x']}+{config['y']}");
