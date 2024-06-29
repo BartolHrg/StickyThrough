@@ -10,13 +10,40 @@ if __name__ == '__main__' and not __package__:
 	__package__ = os.path.split(__actual_dir__)[1];
 pass
 
+in_pyw = sys.stdin is None;
+pid = os.getpid();
+print(f"{pid = }");
+
 try:
 	import tkinter as tk;
 	from tkinter import ttk, colorchooser, messagebox, font;
 	
-	import itertools, json;
+	import itertools, json, signal;
 	
-	# TODO add title
+	class Startup(TypedDict):
+		testing: bool;
+		pid: None | int;
+	pass
+	startup_filename = __actual_dir__ + "/startup.json";
+	with open(startup_filename) as f: startup: Startup = json.load(f);
+	prev_pid = startup["pid"];
+	if in_pyw:
+		# dont run on startup while testing
+		# and dont run multiple instances
+		if startup["testing"] or prev_pid: sys.exit(0);
+	else:
+		# running in IDLE (probably)
+		#                                    != safety check
+		if prev_pid is not None and prev_pid != pid: 
+			try: os.kill(prev_pid, signal.SIGTERM);
+			except: pass;
+		pass
+	pass
+	startup["pid"] = pid;
+	with open(startup_filename, "w") as f: json.dump(startup, f);
+	
+	
+
 	class StickyNote:
 		def __init__(self, config: ConfigElement):
 			self.config = config;
@@ -24,14 +51,19 @@ try:
 			self.frame = self.window.frame;
 			self.tools = Tools(self);
 			self.tools.pack(side = tk.TOP, fill = tk.X);
-			self.title = ttk.Entry(self.frame, font = font.Font(self.window, family="Helvetica", size=14, weight="bold"), justify = tk.CENTER);
-			self.title.insert(0, config["title"]);
+			self.title_var = tk.StringVar(self.frame, value = config["title"]);
+			self.title = ttk.Entry(self.frame, textvariable = self.title_var, font = font.Font(self.window, family="Helvetica", size=14, weight="bold"), justify = tk.CENTER);
 			self.title.pack(side = tk.TOP, fill = tk.X);
 			self.note = tk.Text(self.frame, background = config["color"]);
 			self.note.insert("0.0", config["text"]);
 			self.note.pack(fill = tk.BOTH, expand = True);
 			self.window.geometry(f"{config['width']}x{config['height']}+{config['x']}+{config['y']}");
-			# self.frame.bind("<Button-1>" , lambda e: print(e));
+			self.title_var.trace_add("write", lambda *_: saver.defer(self.title));
+			self.note.bind("<<Modified>>", self.onModified);
+		pass
+		def onModified(self, *_):
+			self.note.edit_modified(False);
+			saver.defer(self.note);
 		pass
 		def updateConfig(self):
 			window = self.window;
@@ -79,9 +111,11 @@ try:
 				self.offset = event;
 			pass
 			def onMove(self, event: tk.Event):
-				x = self.window.winfo_x() + event.x - self.offset.x;
-				y = self.window.winfo_y() + event.y - self.offset.y;
-				self.window.geometry(f"+{x}+{y}");
+				window = self.window;
+				x = window.winfo_x() + event.x - self.offset.x;
+				y = window.winfo_y() + event.y - self.offset.y;
+				window.geometry(f"+{x}+{y}");
+				saver.defer(window);
 			pass
 		pass
 		class Resizer:
@@ -116,6 +150,7 @@ try:
 				width  = max(window.winfo_width () + dwidth , 1);
 				# print((x, y), (width, height));
 				window.geometry(f"{width}x{height}+{x}+{y}");
+				saver.defer(window);
 			pass
 		pass
 	pass
@@ -142,23 +177,23 @@ try:
 		def pickColor(self):
 			text = self.note.note;
 			(color_tuple, color_str) = colorchooser.askcolor(text["background"]);
-			if color_str is not None: text.config(background = color_str);
+			if color_str is None: return;
+			text.config(background = color_str);
+			saver.defer(self);
 		pass
 		def delete(self):
-			# TODO title
 			if not messagebox.askyesno(f"Delete note <{self.note.title.get()}>", "This will permanently delete this note", icon = messagebox.WARNING): return;
 			index = notes.index(self.note);
 			del notes[index];
 			del notes_config[index];
 			self.note.window.destroy();
-			# TODO persist
-			save();
+			saver.defer(self);
 		pass
 		def addNew(self):
 			config = getDefaultConfig();
 			notes_config.append(config);
 			notes.append(StickyNote(config));
-			save();
+			saver.defer(self);
 		pass
 	pass
 	# note = StickyNote();
@@ -189,15 +224,37 @@ try:
 	with open(config_filename) as f: notes_config: list[ConfigElement] = json.load(f);
 	if not notes_config: notes_config.append(getDefaultConfig());
 	
-	def save():
-		for note in notes: note.updateConfig();
-		with open(__actual_dir__ + "/config.json", "w") as f: json.dump(notes_config, f);
+	class Saver:
+		defer_interval_ms = 6_000;
+		def immediately(self):
+			self._cancel();
+			self._immediately();
+		pass
+		def _immediately(self):
+			self._current = None;
+			for note in notes: note.updateConfig();
+			with open(__actual_dir__ + "/config.json", "w") as f: json.dump(notes_config, f);
+			print("saved");
+		pass
+		def defer(self, caller: tk.Widget):
+			self._cancel();
+			timeout_id = caller.after(self.defer_interval_ms, self._immediately);
+			self._current = (caller, timeout_id);
+		pass
+		def _cancel(self):
+			if self._current is not None:
+				(prev_caller, prev_id) = self._current;
+				prev_caller.after_cancel(prev_id);
+			pass
+		pass
+		_current: None | tuple[tk.Widget, Any] = None;
 	pass
+	saver = Saver();
 	
 	notes = [StickyNote(config) for config in notes_config];
 	
 	# with open(__actual_dir__ + "/debug.log", "w") as f: f.write(str(sys.stdin));
-	if sys.stdin is None:
+	if in_pyw:
 		while True:
 			for note in notes:
 				window = note.window;
