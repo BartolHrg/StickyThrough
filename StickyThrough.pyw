@@ -130,24 +130,32 @@ class Window(tk.Tk):
 		pass
 		def onMove(self, event: tk.Event):
 			window = self.window;
-			dx = event.x - self.offset.x;
-			dy = event.y - self.offset.y;
+			dx = event.x_root - self.offset.x_root;
+			dy = event.y_root - self.offset.y_root;
+			self.offset = event;
+			# print((event.x_root, event.y_root), (event.x, event.y), (self.i, self.j), (dx, dy), sep="\t");
 			if self.j == 0:
 				dwidth  = -dx;
-			else:
+			elif self.j == 2:
 				dwidth  = +dx;
 				dx = 0;
+			else:
+				dwidth = dx = 0;
 			pass
 			if self.i == 0:
 				dheight = -dy;
-			else:
+			elif self.i == 2:
 				dheight = +dy;
 				dy = 0;
+			else:
+				dheight = dy = 0;
 			pass
+			old_width  = window.winfo_width (); new_width  = old_width  + dwidth ; width  = max(new_width , 30);
+			old_height = window.winfo_height(); new_height = old_height + dheight; height = max(new_height, 30);
+			if dx != 0: dx = old_width  - width ;
+			if dy != 0: dy = old_height - height;
 			x = window.winfo_x() + dx;
 			y = window.winfo_y() + dy;
-			height = max(window.winfo_height() + dheight, 1);
-			width  = max(window.winfo_width () + dwidth , 1);
 			# print((x, y), (width, height));
 			window.geometry(f"{width}x{height}+{x}+{y}");
 			saver.defer(window);
