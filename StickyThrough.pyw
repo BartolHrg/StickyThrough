@@ -47,7 +47,7 @@ with open(startup_filename, "w") as f: json.dump(startup, f);
 class StickyNote:
 	def __init__(self, config: ConfigElement):
 		self.config = config;
-		self.window = Window();
+		self.window = Window(self);
 		self.frame = self.window.frame;
 		self.tools = Tools(self);
 		self.tools.pack(side = tk.TOP, fill = tk.X);
@@ -78,9 +78,14 @@ class StickyNote:
 			title  = self.title.get(),
 		);
 	pass
+	def setSaved(self, is_saved: bool):
+		if is_saved: self.tools.saved_var.set("");
+		else       : self.tools.saved_var.set("*");
+	pass
 pass
 class Window(tk.Tk):
-	def __init__(self):
+	def __init__(self, sticky: StickyNote):
+		self.sticky_note = sticky;
 		tk.Tk.__init__(self);
 		self.overrideredirect(True);
 		frame = ttk.Frame(self, border = 1, relief = tk.SOLID);
@@ -178,6 +183,10 @@ class Tools(ttk.Frame):
 		self.foreground_color_button = tk.Button(self, cursor = "arrow", text = "T", bd = 1, relief = tk.SOLID, background = "white", command = self.changeForegrounfDolor);
 		self.foreground_color_button.pack(side = tk.LEFT);
 		
+		self.saved_var = tk.StringVar(self.note.window, "");
+		self.saved_label = tk.Label(self, textvariable = self.saved_var);
+		self.saved_label.pack(side = tk.LEFT);
+		
 		self.delete_button = ttk.Button(self, cursor = "arrow", text = "Del", width = 4, command = self.delete);
 		self.delete_button.pack(side = tk.RIGHT);
 		self.create_button = ttk.Button(self, cursor = "arrow", text = "New", width = 4, command = self.addNew);
@@ -252,12 +261,16 @@ class Saver:
 		self._current = None;
 		for note in notes: note.updateConfig();
 		with open(__actual_dir__ + "/config.json", "w") as f: json.dump(notes_config, f);
+		for note in notes: note.setSaved(True);
 		# print("saved");
 	pass
 	def defer(self, caller: tk.Widget):
 		self._cancel();
 		timeout_id = caller.after(self.defer_interval_ms, self._immediately);
 		self._current = (caller, timeout_id);
+		while caller.master is not None: caller = caller.master;
+		root: Window = caller;
+		root.sticky_note.setSaved(False);
 	pass
 	def _cancel(self):
 		if self._current is not None:
