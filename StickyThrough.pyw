@@ -15,34 +15,27 @@ if sys.stderr is None: sys.stderr = open(__actual_dir__ + "/error.log", "w");
 pid = os.getpid();
 # print(f"{pid = }");
 
+SHOULD_NOT_CLOSE_FILE = __actual_dir__ + "/should_not_close";
+
 import tkinter as tk;
 from tkinter import ttk, colorchooser, messagebox, font;
 
-import itertools, json, signal;
+import itertools, json;
 
-class Startup(TypedDict):
-	testing: bool;
-	pid: None | int;
+def killPrevious(): # os.kill(prev_pid, signal.SIGTERM);
+	try: os.remove(SHOULD_NOT_CLOSE_FILE);
+	except: pass;
 pass
-startup_filename = __actual_dir__ + "/startup.json";
-with open(startup_filename) as f: startup: Startup = json.load(f);
-prev_pid = startup["pid"];
+def shouldNotClose(): return os.path.exists(SHOULD_NOT_CLOSE_FILE);
 if in_pyw:
-	# dont run on startup while testing
-	# and dont run multiple instances
-	if startup["testing"] or prev_pid: sys.exit(0);
+	if shouldNotClose(): # meaning previous instance is running
+		killPrevious();
+		sys.exit(0);
+	pass
 else:
 	# running in IDLE (probably)
-	#                                    != safety check
-	if prev_pid is not None and prev_pid != pid: 
-		try: os.kill(prev_pid, signal.SIGTERM);
-		except: pass;
-	pass
+	killPrevious();
 pass
-startup["pid"] = pid;
-with open(startup_filename, "w") as f: json.dump(startup, f);
-
-
 
 class StickyNote:
 	def __init__(self, config: ConfigElement):
@@ -54,16 +47,20 @@ class StickyNote:
 		self.title_var = tk.StringVar(self.frame, value = config["title"]);
 		self.title = ttk.Entry(self.frame, textvariable = self.title_var, font = font.Font(self.window, family="Helvetica", size=14, weight="bold"), justify = tk.CENTER);
 		self.title.pack(side = tk.TOP, fill = tk.X);
-		self.note = tk.Text(self.frame, background = config["color"], wrap = "none");
+		self.note = tk.Text(self.frame, background = config["color"], wrap = "none", state = tk.NORMAL);
 		self.note.insert("0.0", config["text"]);
+		self.note.delete(tk.END + "-1c", tk.END);
+			# Text widget has \n at the start
+			# so delete it (it is the last char)
+		self.note.bind("<<Modified>>", self.onModified);
 		self.note.pack(fill = tk.BOTH, expand = True);
 		self.window.geometry(f"{config['width']}x{config['height']}+{config['x']}+{config['y']}");
 		self.title_var.trace_add("write", lambda *_: saver.defer(self.title));
-		self.note.bind("<<Modified>>", self.onModified);
 	pass
 	def onModified(self, *_):
 		self.note.edit_modified(False);
 		saver.defer(self.note);
+		# self.debugInsertingNewlines();
 	pass
 	def updateConfig(self):
 		window = self.window;
@@ -82,12 +79,23 @@ class StickyNote:
 		if is_saved: self.tools.saved_var.set("");
 		else       : self.tools.saved_var.set("*");
 	pass
+	def debug(self, msg: Any): messagebox.showinfo(f"Sticky <{self.title_var.get()}>", str(msg));
+	def debugInsertingNewlines(self):
+		text = self.note.get("0.0", tk.END);
+		count = 0;
+		for i in reversed(range(len(text))):
+			if text[i] == "\n": count += 1;
+			else: break;
+		pass
+		if count >= 2: self.debug(f"Has {count} newlines");
+	pass
 pass
 class Window(tk.Tk):
 	def __init__(self, sticky: StickyNote):
 		self.sticky_note = sticky;
 		tk.Tk.__init__(self);
 		self.overrideredirect(True);
+		self.bind_all("<Control-s>", saver.immediately);
 		frame = ttk.Frame(self, border = 1, relief = tk.SOLID);
 		frame.pack(expand = True, fil = tk.BOTH);
 		frame.columnconfigure(1, weight = 1);
@@ -191,8 +199,32 @@ class Tools(ttk.Frame):
 		self.delete_button.pack(side = tk.RIGHT);
 		self.create_button = ttk.Button(self, cursor = "arrow", text = "New", width = 4, command = self.addNew);
 		self.create_button.pack(side = tk.RIGHT);
+		self.debug_button = ttk.Button(self, cursor = "arrow", text = "!", width = 1, command = self.debug);
+		self.debug_button.pack(side = tk.RIGHT);
 		# TODO new, hide?, delete
 		# TODO save on ctrl S (no button!)
+	pass
+	def debug(self):
+		outputs = [];
+		def output(*args):
+			outputs.extend(args);
+		pass
+		def onRun():
+			xpr = txt.get("0.0", tk.END);
+			exec(xpr, globals(), { "output": output, "o": output, "self": self, "s": self, });
+			out.delete("0.0", tk.END);
+			out.insert("0.0", "\n".join(map(str, outputs)));
+			outputs.clear();
+		pass
+		wn = tk.Tk();
+		run = ttk.Button(wn, text="run", command=onRun);
+		run.pack();
+		fr = ttk.Frame(wn);
+		fr.pack(fill=tk.BOTH, expand=True);
+		txt = tk.Text(fr);
+		txt.pack(fill=tk.BOTH, expand=True);
+		out = tk.Text(fr);
+		out.pack(fill=tk.BOTH, expand=True);
 	pass
 	def pickColor(self):
 		text = self.note.note;
@@ -253,7 +285,7 @@ if not notes_config: notes_config.append(getDefaultConfig());
 
 class Saver:
 	defer_interval_ms = 6_000;
-	def immediately(self):
+	def immediately(self, *_):
 		self._cancel();
 		self._immediately();
 	pass
@@ -284,15 +316,19 @@ saver = Saver();
 
 notes = [StickyNote(config) for config in notes_config];
 
-# with open(__actual_dir__ + "/debug.log", "w") as f: f.write(str(sys.stdin));
+def dbg(msg):
+	with open(__actual_dir__ + "/debug.log", "w") as f: f.write(str(msg));
+pass
 if in_pyw:
-	while True:
+	with open(SHOULD_NOT_CLOSE_FILE, "wb"): pass;
+	while shouldNotClose():
 		for note in notes:
 			window = note.window;
 			window.update();
 			window.update_idletasks();
 		pass
 	pass
+	saver.immediately();
 pass
 
 print("exiting", file = sys.stderr);
