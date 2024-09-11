@@ -12,13 +12,8 @@ pass
 
 import json, subprocess;
 
-class Startup(TypedDict):
-	testing: bool;
-	pid: None | int;
-pass
-startup_filename = __actual_dir__ + "/startup.json";
-with open(startup_filename) as f: startup: Startup = json.load(f);
-startup["pid"] = None;
-with open(startup_filename, "w") as f: json.dump(startup, f);
+SHOULD_NOT_CLOSE_FILE = __actual_dir__ + "/should_not_close";
+try: os.remove(SHOULD_NOT_CLOSE_FILE);
+except: pass;
 
 sys.exit(subprocess.run([sys.executable, __actual_dir__ + "/StickyThrough.pyw"]));
